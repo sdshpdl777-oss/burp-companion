@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="popup.css" />
+  <title>Burp Companion</title>
+</head>
+<body>
+  <header>
+    <span class="dot" id="dot"></span>
+    <h1>Burp Companion</h1>
+  </header>
+
+  <!-- ====================== API RESPONSES ====================== -->
+  <section class="card">
+    <div class="card-title">True / False APIs <span class="tag" id="apiCount">0</span></div>
+    <div class="api-toolbar">
+      <input type="text" id="apiFilter" placeholder="Filter by endpoint…" />
+      <button id="apiClear" title="Clear list">Clear</button>
+    </div>
+    <p class="status" id="apiStatus">Waiting for APIs that reply true/false…</p>
+    <div id="apiList"></div>
+  </section>
+
+  <!-- ======================= SEND REQUEST ======================= -->
+  <section class="card" id="sendCard">
+    <div class="card-title">Send Request</div>
+    <div class="send-line">
+      <select id="reqMethod">
+        <option>GET</option><option>POST</option><option>PUT</option>
+        <option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option>
+      </select>
+      <input type="text" id="reqUrl" placeholder="https://api.example.com/users" />
+    </div>
+    <label class="field-label" for="reqHeaders">Headers <code>Name: value</code>, one per line</label>
+    <textarea id="reqHeaders" rows="3" placeholder="Authorization: Bearer …&#10;Content-Type: application/json"></textarea>
+    <label class="field-label" for="reqBody">Body</label>
+    <textarea id="reqBody" rows="3" placeholder='{"key": "value"}'></textarea>
+    <div class="send-actions">
+      <label class="check"><input type="checkbox" id="reqCookies" checked /> Send my cookies</label>
+      <button class="primary" id="reqSend">Send</button>
+    </div>
+    <div id="resBox" hidden>
+      <div class="res-meta">
+        <span class="astatus" id="resStatus"></span>
+        <span id="resInfo"></span>
+        <button id="resCopy" title="Copy body">Copy</button>
+      </div>
+      <details class="res-headers"><summary>Response headers</summary><pre id="resHeaders"></pre></details>
+      <pre class="api-body" id="resBody"></pre>
+    </div>
+  </section>
+
+  <!-- ============================ PROXY ============================ -->
+  <section class="card">
+    <div class="card-title">Proxy (Burp)</div>
+    <div class="row switch-row">
+      <label for="toggle">Proxy through Burp</label>
+      <label class="switch"><input type="checkbox" id="toggle" /><span class="slider"></span></label>
+    </div>
+    <div class="row"><label for="host">Host</label><input type="text" id="host" placeholder="127.0.0.1" /></div>
+    <div class="row"><label for="port">Port</label><input type="number" id="port" placeholder="8080" min="1" max="65535" /></div>
+    <div class="row">
+      <label for="scheme">Scheme</label>
+      <select id="scheme">
+        <option value="http">http</option><option value="https">https</option>
+        <option value="socks5">socks5</option><option value="socks4">socks4</option>
+      </select>
+    </div>
+    <p class="status" id="status">Direct connection.</p>
+  </section>
+
+  <p class="hint">DevTools → <b>Burp</b> panel inspects &amp; replays requests.</p>
+
+  <template id="apiTpl">
+    <div class="api-item">
+      <div class="api-head">
+        <span class="method"></span>
+        <span class="astatus"></span>
+        <span class="title"></span>
+        <span class="endpoint"></span>
+        <button class="resend" title="Load into Send Request">Send again</button>
+        <span class="chev">▸</span>
+      </div>
+      <pre class="api-body" hidden></pre>
+    </div>
+  </template>
+
+  <script src="bools.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="panel.css" />
+  <title>Burp Panel</title>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="clear" title="Clear history">Clear</button>
+    <input type="text" id="filter" placeholder="Filter by URL / method…" />
+    <label class="chk"><input type="checkbox" id="preserve" /> Preserve on navigate</label>
+    <span class="count" id="count">0</span>
+  </div>
+
+  <div class="layout">
+    <div class="history" id="history">
+      <table>
+        <thead>
+          <tr><th class="c-method">Method</th><th class="c-status">Status</th><th class="c-url">URL</th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <p class="empty" id="empty">Requests made by this tab will appear here.</p>
+    </div>
+
+    <div class="detail" id="detail">
+      <div class="detail-empty" id="detailEmpty">Select a request to inspect or replay it.</div>
+
+      <div class="editor" id="editor" hidden>
+        <div class="req-line">
+          <select id="method">
+            <option>GET</option><option>POST</option><option>PUT</option>
+            <option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option>
+          </select>
+          <input type="text" id="url" spellcheck="false" />
+          <button id="send" class="primary">Resend</button>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active" data-tab="reqHeaders">Req Headers</button>
+          <button class="tab" data-tab="reqBody">Req Body</button>
+          <button class="tab" data-tab="response">Response</button>
+        </div>
+
+        <div class="pane" id="reqHeaders">
+          <textarea id="headers" spellcheck="false" placeholder="Header-Name: value&#10;One per line"></textarea>
+        </div>
+        <div class="pane" id="reqBody" hidden>
+          <textarea id="body" spellcheck="false" placeholder="Request body"></textarea>
+        </div>
+        <div class="pane" id="response" hidden>
+          <div class="resp-meta" id="respMeta">No response yet.</div>
+          <div class="copy-row">
+            <button id="copyCurl">Copy as cURL</button>
+            <button id="copyFetch">Copy as fetch</button>
+          </div>
+          <textarea id="respBody" spellcheck="false" readonly placeholder="Response body"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="panel.js"></script>
+</body>
+</html>

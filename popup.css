@@ -1,0 +1,153 @@
+:root {
+  --bg: #1e1e1e;
+  --panel: #262626;
+  --panel2: #2d2d2d;
+  --text: #e6e6e6;
+  --muted: #9a9a9a;
+  --accent: #e8613c;
+  --border: #3a3a3a;
+  --green: #6cc070;
+  --red: #e05c5c;
+  --amber: #d9a441;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  width: 430px;
+  max-height: 580px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+h1 { font-size: 15px; margin: 0; font-weight: 600; }
+
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.dot.on { background: var(--accent); box-shadow: 0 0 6px 1px rgba(232, 97, 60, 0.7); }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.card-title {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--muted); font-weight: 600; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.tag {
+  background: var(--red); color: #fff; font-size: 10px; font-weight: 700;
+  padding: 1px 6px; border-radius: 4px; letter-spacing: .5px;
+}
+
+.row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.row label { color: var(--muted); }
+.switch-row { padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--border); }
+.switch-row > label { color: var(--text); font-weight: 500; }
+
+.field-label { display: block; color: var(--muted); font-size: 11px; margin-bottom: 5px; }
+.field-label code { color: var(--accent); }
+
+input[type="text"], input[type="number"], select {
+  width: 150px; padding: 6px 8px; background: var(--panel2);
+  border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px;
+}
+textarea {
+  width: 100%; padding: 6px 8px; background: var(--panel2);
+  border: 1px solid var(--border); border-radius: 6px; color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  resize: vertical;
+}
+input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); }
+
+button {
+  background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 5px; padding: 5px 10px; cursor: pointer; font-size: 12px;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.drop:hover { border-color: var(--red); color: var(--red); }
+
+.switch { position: relative; display: inline-block; width: 42px; height: 24px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; inset: 0; background: #4a4a4a; border-radius: 24px; transition: .15s; }
+.slider::before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .15s; }
+.switch input:checked + .slider { background: var(--accent); }
+.switch input:checked + .slider::before { transform: translateX(18px); }
+
+.status {
+  margin: 10px 0 0; padding: 8px 10px; background: var(--panel2);
+  border-radius: 6px; border-left: 3px solid var(--muted); color: var(--text);
+  word-break: break-word;
+}
+.status.on { border-left-color: var(--accent); }
+.status.rec { border-left-color: var(--red); }
+.status.warn { border-left-color: var(--amber); color: var(--amber); }
+
+.hint { color: var(--muted); font-size: 11px; line-height: 1.4; margin: 8px 0 0; }
+.hint b { color: var(--accent); }
+
+/* API responses viewer */
+.api-toolbar { display: flex; gap: 6px; margin-bottom: 4px; }
+.api-toolbar #apiFilter { flex: 1; width: auto; }
+
+#apiList { margin-top: 8px; }
+.api-item {
+  border: 1px solid var(--border); border-radius: 6px;
+  margin-top: 6px; background: var(--panel2); overflow: hidden;
+}
+.api-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 9px; cursor: pointer; font-size: 11px;
+}
+.api-head:hover { background: rgba(232, 97, 60, 0.10); }
+.api-head .method { font-weight: 700; min-width: 42px; }
+.api-head .astatus { font-weight: 700; min-width: 26px; }
+.s-2xx { color: var(--green); } .s-3xx { color: var(--amber); }
+.s-4xx, .s-5xx { color: var(--red); }
+.api-head .endpoint {
+  flex: 1; color: var(--text); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.api-head .chev { color: var(--muted); }
+.api-body {
+  margin: 0; padding: 10px; max-height: 200px; overflow: auto;
+  background: #1b1b1b; border-top: 1px solid var(--border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; line-height: 1.45; white-space: pre; color: #d7d7d7;
+}
+
+/* Send Request */
+.send-line { display: flex; gap: 6px; margin-bottom: 10px; }
+.send-line select { width: 90px; }
+.send-line #reqUrl { flex: 1; width: auto; }
+#sendCard textarea { margin-bottom: 8px; }
+.send-actions { display: flex; align-items: center; justify-content: space-between; }
+.check { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+#resBox { margin-top: 10px; }
+.res-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 6px; }
+.res-meta #resInfo { flex: 1; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.res-meta .astatus { font-weight: 700; }
+.res-headers { margin-bottom: 6px; font-size: 11px; color: var(--muted); }
+.res-headers summary { cursor: pointer; }
+.res-headers pre {
+  margin: 6px 0 0; padding: 8px; background: #1b1b1b; border-radius: 6px;
+  max-height: 140px; overflow: auto; white-space: pre-wrap; word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #d7d7d7;
+}
+#resBody { border: 1px solid var(--border); border-radius: 6px; max-height: 320px; }
+.api-head .resend { padding: 2px 6px; font-size: 10px; }
+
+.api-head .title { font-weight: 600; white-space: nowrap; }
+.api-head .endpoint { color: var(--muted); }
+.api-body .jt { color: var(--green); font-weight: 600; }
+.api-body .jf { color: var(--red); font-weight: 600; }

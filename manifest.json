@@ -1,0 +1,60 @@
+{
+  "manifest_version": 3,
+  "name": "Burp Companion",
+  "version": "1.0.0",
+  "description": "Toggle Chrome traffic through Burp Suite's proxy and inspect/replay HTTP requests from a DevTools panel.",
+  "permissions": [
+    "proxy",
+    "storage",
+    "tabs",
+    "debugger"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "inject.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true,
+      "match_origin_as_fallback": true
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "bools.js",
+        "bridge.js"
+      ],
+      "run_at": "document_start",
+      "world": "ISOLATED",
+      "all_frames": true,
+      "match_origin_as_fallback": true
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Burp Companion",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "devtools_page": "devtools.html"
+}
