@@ -23,6 +23,26 @@
     <div id="apiList"></div>
   </section>
 
+  <!-- ==================== ACTIVE COLLECTOR ==================== -->
+  <section class="card" id="collectCard">
+    <div class="card-title">Collect true/false directly <span class="tag" id="collectCount">0</span></div>
+    <p class="field-label">Fires each endpoint straight from the extension, using your session — no matter whether the page ever called it — and merges every true/false into one JSON.</p>
+    <label class="field-label" for="collectExtra">Extra endpoint URLs (optional), one per line</label>
+    <textarea id="collectExtra" rows="2" placeholder="https://your-server/api/verify&#10;https://your-server/api/check"></textarea>
+    <div class="send-actions">
+      <label class="check"><input type="checkbox" id="collectCookies" checked /> Send my cookies</label>
+      <button class="primary" id="collectRun">Collect all</button>
+    </div>
+    <p class="status" id="collectStatus">Reuses endpoints captured on this tab, plus any you paste above.</p>
+    <div id="collectBox" hidden>
+      <div class="res-meta">
+        <span id="collectInfo"></span>
+        <button id="collectCopy" title="Copy JSON">Copy JSON</button>
+      </div>
+      <pre class="api-body" id="collectJson"></pre>
+    </div>
+  </section>
+
   <!-- ======================= SEND REQUEST ======================= -->
   <section class="card" id="sendCard">
     <div class="card-title">Send Request</div>

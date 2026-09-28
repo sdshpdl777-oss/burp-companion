@@ -134,14 +134,49 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   chrome.storage.session.remove(capKey(tabId)).catch(() => {});
 });
 
-// ---- Network-level Response Interception via Chrome Debugger ----
+// ---- True response interception (server → [PAUSED HERE] → page) ----
+// Uses the CDP **Fetch** domain, not the Network domain. The Network domain only
+// *reports* responses (Network.responseReceived) as they're already being handed
+// to the renderer. The Fetch domain, enabled at the Response stage, *pauses* each
+// response after the server sent it but BEFORE the page's JS can read it — exactly
+// where Burp sits. We inspect the held bytes, then release them with
+// Fetch.continueRequest. (Fetch.fulfillRequest could rewrite them instead — that's
+// how you'd add response editing later.)
+const attached = new Set(); // tabIds we currently hold a debugger session on
+
+// Decode a getResponseBody result to a JS string, honouring UTF-8 for text bodies
+// (plain atob() mangles multi-byte characters).
+function decodeBody(resData) {
+  const raw = resData?.body || "";
+  if (!resData?.base64Encoded) return raw;
+  try {
+    const bin = atob(raw);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch (_) {
+    return "";
+  }
+}
+
+// Skip resource types that never carry an API true/false and would waste a
+// getResponseBody round-trip (and can be large binaries).
+const SKIP_TYPES = new Set(["Image", "Media", "Font", "Stylesheet", "Manifest"]);
+
 async function attachDebugger(tabId) {
-  if (!chrome.debugger) return;
+  if (!chrome.debugger || attached.has(tabId)) return;
+  attached.add(tabId); // reserve before await so concurrent onUpdated events don't double-attach
   try {
     const target = { tabId };
     await chrome.debugger.attach(target, "1.3");
-    await chrome.debugger.sendCommand(target, "Network.enable");
-  } catch (_) {}
+    // Pause every response just before it reaches the page. requestStage:"Response"
+    // means the request already went out and the server's reply is in hand, held.
+    await chrome.debugger.sendCommand(target, "Fetch.enable", {
+      patterns: [{ requestStage: "Response" }]
+    });
+  } catch (_) {
+    attached.delete(tabId); // attach failed (e.g. DevTools already attached) — allow a retry later
+  }
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -150,60 +185,101 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
+chrome.tabs.onRemoved.addListener((tabId) => attached.delete(tabId));
 if (chrome.debugger) {
-  chrome.debugger.onEvent.addListener(async (source, method, params) => {
-    if (method === "Network.responseReceived" && source.tabId) {
-      const { requestId, response } = params;
-      if (!response || !response.url || !/^https?:\/\//i.test(response.url)) return;
-
-      if (/\.(png|jpg|jpeg|gif|svg|ico|css|js|woff2?|ttf|eot)(\?.*)?$/i.test(response.url)) return;
-
-      try {
-        const resData = await chrome.debugger.sendCommand(source, "Network.getResponseBody", { requestId });
-        let body = resData.body || "";
-        if (resData.base64Encoded) {
-          try { body = atob(body); } catch (_) {}
-        }
-
-        const ct = response.headers ? (response.headers["content-type"] || response.headers["Content-Type"] || "") : "";
-        const bools = extractBools(body, ct);
-        if (bools.length) {
-          let endpoint = response.url, path = response.url;
-          try { const u = new URL(response.url); endpoint = u.host + u.pathname; path = u.pathname + u.search; } catch (_) {}
-          const pretty = formatBoolJson(body, ct) || body;
-          const item = {
-            url: response.url,
-            endpoint,
-            path,
-            method: response.method || "GET",
-            status: response.status,
-            bools,
-            pretty,
-            contentType: "application/json",
-            reqHeaders: [],
-            reqBody: "",
-            ts: Date.now()
-          };
-          await addCapture(source.tabId, item);
-        }
-      } catch (_) {}
-    }
+  // The user can detach us via the "cancel" banner; forget the tab so we can reattach.
+  chrome.debugger.onDetach.addListener((source) => {
+    if (source.tabId != null) attached.delete(source.tabId);
   });
 }
 
-async function replay(req, senderTabId) {
+if (chrome.debugger) {
+  chrome.debugger.onEvent.addListener((source, method, params) => {
+    if (method !== "Fetch.requestPaused" || source.tabId == null) return;
+    handlePaused(source, params);
+  });
+}
+
+// Read a paused response, capture any true/false, then ALWAYS release it. If we
+// never continued the request the page would hang forever, so releasing is in a
+// finally and its own failure is swallowed (the tab may already be gone).
+async function handlePaused(source, params) {
+  const { requestId, request = {}, responseStatusCode, responseErrorReason, resourceType } = params;
+  const isResponseStage = responseStatusCode != null || responseErrorReason != null;
+
+  try {
+    // A network error (DNS, refused, aborted) has no body to read — just let it through.
+    if (!isResponseStage || responseErrorReason) return;
+
+    const url = request.url || "";
+    if (!/^https?:\/\//i.test(url)) return;
+    if (SKIP_TYPES.has(resourceType)) return;
+    if (/\.(png|jpg|jpeg|gif|svg|ico|css|js|woff2?|ttf|eot)(\?.*)?$/i.test(url)) return;
+
+    let resData;
+    try {
+      resData = await chrome.debugger.sendCommand(source, "Fetch.getResponseBody", { requestId });
+    } catch (_) {
+      return; // body unavailable (204/redirect/evicted) — nothing to inspect, still release below
+    }
+    const body = decodeBody(resData);
+    if (!body) return;
+
+    // responseHeaders is an array of {name, value}; find content-type case-insensitively.
+    let ct = "";
+    for (const h of params.responseHeaders || []) {
+      if (h && /^content-type$/i.test(h.name)) { ct = h.value || ""; break; }
+    }
+
+    const bools = extractBools(body, ct);
+    if (!bools.length) return;
+
+    let endpoint = url, path = url;
+    try { const u = new URL(url); endpoint = u.host + u.pathname; path = u.pathname + u.search; } catch (_) {}
+
+    // The paused event also carries the outgoing request, so replay works from
+    // network-captured items too (page-world hooks aren't the only source now).
+    const reqHeaders = Object.entries(request.headers || {}).map(([name, value]) => ({ name, value: String(value) }));
+
+    const item = {
+      url,
+      endpoint,
+      path,
+      method: request.method || "GET",
+      status: responseStatusCode,
+      bools,
+      pretty: formatBoolJson(body, ct) || body,
+      contentType: "application/json",
+      reqHeaders,
+      reqBody: request.postData || "",
+      ts: Date.now()
+    };
+    await addCapture(source.tabId, item);
+  } catch (_) {
+    // never let inspection failure block the response
+  } finally {
+    try { await chrome.debugger.sendCommand(source, "Fetch.continueRequest", { requestId }); } catch (_) {}
+  }
+}
+
+// The shared fetch core: fires ONE request straight from the service worker
+// (not the page), carrying the site's session cookies when credentials:"include".
+// This is the real request to the server — the same engine Send Request and the
+// batch Collector both ride on.
+async function rawFetch(req) {
   const headers = {};
   for (const h of req.headers || []) {
     if (!h || !h.name) continue;
     if (FORBIDDEN_HEADERS.has(h.name.toLowerCase())) continue;
     headers[h.name] = h.value;
   }
+  const method = (req.method || "GET").toUpperCase();
   const init = {
-    method: req.method || "GET", headers, cache: "no-store",
+    method, headers, cache: "no-store",
     redirect: req.redirect || "manual",
     credentials: req.credentials || "include"
   };
-  if (req.body != null && !["GET", "HEAD"].includes(init.method.toUpperCase())) init.body = req.body;
+  if (req.body != null && !["GET", "HEAD"].includes(method)) init.body = req.body;
 
   const started = performance.now();
   const res = await fetch(req.url, init);
@@ -211,19 +287,23 @@ async function replay(req, senderTabId) {
   const resHeaders = [];
   res.headers.forEach((value, name) => resHeaders.push({ name, value }));
   const body = await res.text();
-
   const ct = res.headers.get("content-type") || "";
-  const bools = extractBools(body, ct);
+  return { status: res.status, statusText: res.statusText, headers: resHeaders, body, ct, elapsedMs, finalUrl: res.url };
+}
+
+async function replay(req, senderTabId) {
+  const r = await rawFetch(req);
+  const bools = extractBools(r.body, r.ct);
   if (bools.length) {
     let endpoint = req.url, path = req.url;
     try { const u = new URL(req.url); endpoint = u.host + u.pathname; path = u.pathname + u.search; } catch (_) {}
-    const pretty = formatBoolJson(body, ct) || body;
+    const pretty = formatBoolJson(r.body, r.ct) || r.body;
     const item = {
       url: req.url,
       endpoint,
       path,
       method: (req.method || "GET").toUpperCase(),
-      status: res.status,
+      status: r.status,
       bools,
       pretty,
       contentType: "application/json",
@@ -242,7 +322,73 @@ async function replay(req, senderTabId) {
     }
   }
 
-  return { ok: true, status: res.status, statusText: res.statusText, headers: resHeaders, body, elapsedMs, finalUrl: res.url };
+  return { ok: true, status: r.status, statusText: r.statusText, headers: r.headers, body: r.body, elapsedMs: r.elapsedMs, finalUrl: r.finalUrl };
+}
+
+// ---- Active Collector ----
+// Fires a batch of endpoints DIRECTLY from the extension (whether or not the page
+// ever called them), reads each full response, and merges every true/false into a
+// single JSON object keyed by "METHOD /path". This is the "fetch it myself, don't
+// wait for the browser" engine — Burp-Repeater-style, run over a list at once.
+// Authorized use only: point it at servers you own or are permitted to test.
+async function collect(payload) {
+  const list = Array.isArray(payload?.endpoints) ? payload.endpoints : [];
+  const credentials = payload?.credentials || "include";
+  const CONCURRENCY = 5;          // be gentle; a few in flight at a time
+  const MAX_ENDPOINTS = 300;      // safety cap so a huge list can't hammer a host
+
+  // De-duplicate by METHOD + URL, normalise to request objects.
+  const seen = new Set();
+  const reqs = [];
+  for (const ep of list) {
+    const url = typeof ep === "string" ? ep : ep?.url;
+    if (!url || !/^https?:\/\//i.test(url)) continue;
+    const method = ((typeof ep === "object" && ep.method) || "GET").toUpperCase();
+    const key = method + " " + url;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    reqs.push({
+      url, method,
+      headers: (typeof ep === "object" && ep.headers) || [],
+      body: (typeof ep === "object" && ep.body) || null,
+      credentials, redirect: "follow"
+    });
+    if (reqs.length >= MAX_ENDPOINTS) break;
+  }
+
+  const aggregate = {};   // "METHOD /path" -> pruned true/false JSON
+  const results = [];     // per-endpoint outcome for the run log
+
+  async function runOne(req) {
+    let label = req.url;
+    try { const u = new URL(req.url); label = u.pathname + u.search; } catch (_) {}
+    const tag = req.method + " " + label;
+    try {
+      const r = await rawFetch(req);
+      const bools = extractBools(r.body, r.ct);
+      const pretty = formatBoolJson(r.body, r.ct);
+      if (bools.length) {
+        let value;
+        if (pretty) { try { value = JSON.parse(pretty); } catch (_) { value = pretty; } }
+        // Unwrap the common { "value": true } single-field case to a bare boolean.
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          const ks = Object.keys(value);
+          if (ks.length === 1 && ks[0] === "value") value = value.value;
+        }
+        aggregate[tag] = value;
+      }
+      results.push({ tag, url: req.url, method: req.method, status: r.status, ok: true, count: bools.length });
+    } catch (e) {
+      results.push({ tag, url: req.url, method: req.method, ok: false, error: String((e && e.message) || e) });
+    }
+  }
+
+  // Simple bounded-concurrency worker pool.
+  let i = 0;
+  async function worker() { while (i < reqs.length) { await runOne(reqs[i++]); } }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, reqs.length) }, worker));
+
+  return { ok: true, aggregate, results, total: reqs.length, withBools: Object.keys(aggregate).length };
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -254,26 +400,27 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           break;
         case "setState": {
           const cfg = { ...(await getConfig()), ...msg.payload };
+          // Honor the user's choice: turning the toggle ON keeps it ON. We still
+          // probe Burp, but only to WARN — we no longer force the toggle back off.
+          // (If Burp really is down, pages route into it and may not load; the
+          // warning says so, and toggling off restores a direct connection.)
+          let warning;
           if (cfg.enabled) {
             await setDirect(); // stay online while probing
             if (!(await burpReachable(cfg))) {
-              cfg.enabled = false;
-              await chrome.storage.local.set(cfg);
-              await applyProxy(cfg);
-              sendResponse({
-                ...cfg,
-                error: `Can't reach Burp at ${cfg.host}:${cfg.port}. Start Burp and its Proxy listener, then try again.`
-              });
-              break;
+              warning = `Proxy is ON, but Burp didn't answer at ${cfg.host}:${cfg.port}. If pages stop loading, start Burp's Proxy listener — or toggle this off.`;
             }
           }
           await chrome.storage.local.set(cfg);
           await applyProxy(cfg);
-          sendResponse(cfg);
+          sendResponse(warning ? { ...cfg, error: warning } : cfg);
           break;
         }
         case "replay":
           sendResponse(await replay(msg.payload, _sender.tab?.id || msg.payload?.tabId));
+          break;
+        case "collect":
+          sendResponse(await collect(msg.payload));
           break;
         // ---- from bridge.js (content script) ----
         case "page-start":

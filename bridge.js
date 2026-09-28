@@ -24,14 +24,12 @@
     };
   }
 
-  // After the extension is reloaded, this old copy of the script is orphaned
-  // ("Extension context invalidated") — stop sending instead of throwing.
+
   function send(msg) {
     if (!chrome.runtime?.id) return;
     try { chrome.runtime.sendMessage(msg, () => void chrome.runtime.lastError); } catch (_) {}
   }
 
-  // A fresh top-level page starts a fresh list.
   if (isTop) send({ type: "page-start" });
 
   window.addEventListener("message", (e) => {

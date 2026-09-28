@@ -15,6 +15,7 @@ const respMeta = $("respMeta");
 const respBody = $("respBody");
 const sendBtn = $("send");
 
+
 let entries = [];       // captured requests
 let selectedId = null;
 let nextId = 1;
@@ -123,7 +124,7 @@ function selectEntry(id) {
   detailEmpty.hidden = true;
   editor.hidden = false;
 
-  methodEl.value = ["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"].includes(e.method)
+  methodEl.value = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].includes(e.method)
     ? e.method : "GET";
   urlEl.value = e.url;
   headersEl.value = headersToText(e.headers);
@@ -178,7 +179,7 @@ sendBtn.addEventListener("click", () => {
     const cls = statusClass(res.status);
     const color = cls === "s-2xx" ? "var(--green)"
       : cls === "s-3xx" ? "var(--amber)"
-      : cls ? "var(--red)" : "var(--muted)";
+        : cls ? "var(--red)" : "var(--muted)";
     respMeta.style.borderLeftColor = color;
     respMeta.textContent = `${res.status} ${res.statusText}  ·  ${res.elapsedMs} ms  ·  ${res.body.length} bytes`;
     const hdrText = res.headers.map((h) => `${h.name}: ${h.value}`).join("\n");
